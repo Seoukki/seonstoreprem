@@ -1,16 +1,11 @@
-// api/config.js — Returns safe public config to frontend
-// Semua config diambil dari ENV, tidak ada hardcode
+export default async function handler(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  if (req.method !== 'GET') return res.status(405).end();
 
-export default function handler(req, res) {
-  if (req.method === 'OPTIONS') return res.status(200).end();
-
-  res.setHeader('Cache-Control', 'public, max-age=60');
-  res.json({
-    supabaseUrl:  process.env.SUPABASE_URL  || '',
-    supabaseAnon: process.env.SUPABASE_ANON_KEY || '',
-    storeName:    process.env.STORE_NAME    || 'SeonsPrems',
-    whatsapp:     process.env.WA_NUMBER     || '',
-    telegram:     process.env.TG_USERNAME   || '',
-    instagram:    process.env.IG_USERNAME   || '',
+  return res.status(200).json({
+    store_name: process.env.STORE_NAME || 'SeonsPrems',
+    wa_number: process.env.WA_NUMBER || '',
+    telegram_user: process.env.TELEGRAM_USER || '',
+    ig_user: process.env.IG_USER || '',
   });
 }
