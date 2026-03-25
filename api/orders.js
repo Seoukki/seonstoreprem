@@ -1,40 +1,47 @@
-// api/orders.js — Pesanan & Leaderboard
-// GET /api/orders?action=leaderboard   => top buyers (public)
-// GET /api/orders?action=stats         => statistik admin
-// GET /api/orders                      => list semua (admin)
+import { createClient } from '@supabase/supabase-js';
 
-const SB_URL = process.env.SUPABASE_URL;
-const SB_KEY = process.env.SUPABASE_SERVICE_KEY;
-const ADM_PW = process.env.ADMIN_PASSWORD;
+const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
-function isAdmin(req) {
-  return (req.headers['x-admin-key'] || req.query?.admin_key) === ADM_PW;
-}
-
-async function sbFetch(path) {
-  const r = await fetch(`${SB_URL}/rest/v1/${path}`, {
-    headers: {
-      apikey:        SB_KEY,
-      Authorization: `Bearer ${SB_KEY}`,
-      'Content-Type': 'application/json',
-    },
-  });
-  if (!r.ok) {
-    const t = await r.text();
-    throw new Error(`Supabase GET ${path}: ${r.status} ${t}`);
-  }
-  return r.json();
+function adminCheck(req) {
+  return (req.headers['x-admin-key'] || '') === process.env.ADMIN_PASSWORD;
 }
 
 export default async function handler(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-admin-key');
   if (req.method === 'OPTIONS') return res.status(200).end();
+  if (!adminCheck(req)) return res.status(401).json({ error: 'Unauthorized' });
 
-  const action = req.query.action;
+  const { data, error } = await sb
+    .from('orders')
+    .select('id, txn_id, product_name, email, total, status, created_at, paid_at, quantity, duration_label')
+    .order('created_at', { ascending: false })
+    .limit(100);
 
-  try {
-    // ── LEADERBOARD (public) ──────────────────────────────────
-    if (action === 'leaderboard') {
-      const orders = await sbFetch('orders?status=eq.paid&select=email,total&order=total.desc');
+  if (error) return res.status(500).json({ error: error.message });
+
+  const totalRevenue = (data || [])
+    .filter(o => o.status === 'paid')
+    .reduce((s, o) => s + (o.total || 0), 0);
+
+  const leaderboard = {};
+  (data || []).filter(o => o.status === 'paid').forEach(o => {
+    if (!leaderboard[o.email]) leaderboard[o.email] = { email: o.email, total: 0, count: 0 };
+    leaderboard[o.email].total += o.total || 0;
+    leaderboard[o.email].count += 1;
+  });
+
+  return res.status(200).json({
+    orders: data || [],
+    stats: {
+      total_orders: data?.length || 0,
+      paid_orders: data?.filter(o => o.status === 'paid').length || 0,
+      total_revenue: totalRevenue,
+    },
+    leaderboard: Object.values(leaderboard).sort((a, b) => b.total - a.total).slice(0, 10),
+  });
+}      const orders = await sbFetch('orders?status=eq.paid&select=email,total&order=total.desc');
       // Aggregate by email
       const map = {};
       for (const o of orders || []) {
