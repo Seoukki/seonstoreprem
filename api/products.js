@@ -1,40 +1,77 @@
-// api/products.js — Produk CRUD
-// GET    /api/products          => list semua produk aktif (public)
-// GET    /api/products?id=xxx   => detail produk
-// POST   /api/products          => tambah produk (admin)
-// PUT    /api/products?id=xxx   => edit produk (admin)
-// DELETE /api/products?id=xxx   => hapus produk (admin)
+import { createClient } from '@supabase/supabase-js';
 
-const SB_URL  = process.env.SUPABASE_URL;
-const SB_KEY  = process.env.SUPABASE_SERVICE_KEY;
-const ADM_PW  = process.env.ADMIN_PASSWORD;
+const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
-function isAdmin(req) {
-  const auth = req.headers['x-admin-key'] || req.body?.admin_key;
-  return auth === ADM_PW;
-}
-
-async function sbFetch(path, method = 'GET', body = null) {
-  const opts = {
-    method,
-    headers: {
-      apikey:        SB_KEY,
-      Authorization: `Bearer ${SB_KEY}`,
-      'Content-Type': 'application/json',
-      Prefer:        method === 'POST' ? 'return=representation' : 'return=representation',
-    },
-  };
-  if (body) opts.body = JSON.stringify(body);
-  const r = await fetch(`${SB_URL}/rest/v1/${path}`, opts);
-  if (!r.ok) {
-    const t = await r.text();
-    throw new Error(`Supabase ${method} ${path}: ${r.status} ${t}`);
-  }
-  const txt = await r.text();
-  return txt ? JSON.parse(txt) : null;
+function adminCheck(req) {
+  const key = req.headers['x-admin-key'] || '';
+  return key === process.env.ADMIN_PASSWORD;
 }
 
 export default async function handler(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-admin-key');
+  if (req.method === 'OPTIONS') return res.status(200).end();
+
+  if (req.method === 'GET') {
+    const isAdmin = adminCheck(req);
+    let query = sb.from('products').select(`
+      id, name, category, description, image_url, prices, badge, active, rules, created_at,
+      account_pool(count)
+    `);
+    if (!isAdmin) query = query.eq('active', true);
+    query = query.order('created_at', { ascending: false });
+
+    const { data, error } = await query;
+    if (error) return res.status(500).json({ error: error.message });
+
+    const products = (data || []).map(p => ({
+      ...p,
+      stock: p.account_pool?.[0]?.count ?? 0,
+      account_pool: undefined,
+    }));
+
+    return res.status(200).json(products);
+  }
+
+  if (!adminCheck(req)) return res.status(401).json({ error: 'Unauthorized' });
+
+  if (req.method === 'POST') {
+    const { name, category, description, image_url, prices, badge, rules } = req.body;
+    if (!name || !category || !prices) return res.status(400).json({ error: 'Data tidak lengkap' });
+
+    const { data, error } = await sb.from('products').insert({
+      name, category, description, image_url, prices, badge: badge || '', rules: rules || '', active: true,
+    }).select().single();
+
+    if (error) return res.status(500).json({ error: error.message });
+    return res.status(201).json(data);
+  }
+
+  if (req.method === 'PUT') {
+    const { id, name, category, description, image_url, prices, badge, active, rules } = req.body;
+    if (!id) return res.status(400).json({ error: 'ID diperlukan' });
+
+    const { data, error } = await sb.from('products').update({
+      name, category, description, image_url, prices, badge, active, rules,
+      updated_at: new Date().toISOString(),
+    }).eq('id', id).select().single();
+
+    if (error) return res.status(500).json({ error: error.message });
+    return res.status(200).json(data);
+  }
+
+  if (req.method === 'DELETE') {
+    const { id } = req.body;
+    if (!id) return res.status(400).json({ error: 'ID diperlukan' });
+
+    const { error } = await sb.from('products').update({ active: false }).eq('id', id);
+    if (error) return res.status(500).json({ error: error.message });
+    return res.status(200).json({ success: true });
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' });
+}export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   try {
