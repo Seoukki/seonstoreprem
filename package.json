@@ -1,19 +1,11 @@
 {
-  "name": "seonsprems-store",
-  "version": "3.0.0",
-  "description": "SeonsPrems Premium Digital Store",
+  "name": "seonstoreprem",
+  "version": "2.0.0",
   "private": true,
-  "scripts": {
-    "dev": "vercel dev",
-    "deploy": "vercel --prod"
-  },
   "dependencies": {
-    "node-fetch": "^2.7.0"
-  },
-  "devDependencies": {
-    "vercel": "latest"
+    "@supabase/supabase-js": "^2.45.0"
   },
   "engines": {
-    "node": "24.x"
+    "node": "24"
   }
 }
