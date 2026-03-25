@@ -1,0 +1,19 @@
+{
+  "name": "seonsprems-store",
+  "version": "3.0.0",
+  "description": "SeonsPrems Premium Digital Store",
+  "private": true,
+  "scripts": {
+    "dev": "vercel dev",
+    "deploy": "vercel --prod"
+  },
+  "dependencies": {
+    "node-fetch": "^2.7.0"
+  },
+  "devDependencies": {
+    "vercel": "latest"
+  },
+  "engines": {
+    "node": ">=18.x"
+  }
+}
